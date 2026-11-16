@@ -3,5 +3,5 @@
   place-items: center;
   min-block-size: 100dvh;
   padding: 2rem 1.25rem;
-  background: var(--ui-surface);
+  background: transparent;
 }
