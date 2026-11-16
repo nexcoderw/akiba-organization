@@ -99,8 +99,12 @@ export function SessionProvider({
     let lastChecked = performance.now();
     function revalidate() {
       if (document.hidden) return;
+      // Focus and visibility can fire together. Keep the verified page mounted
+      // while a single background request checks the live session.
+      if (lifecycle.controller && !lifecycle.controller.signal.aborted) return;
+      if (performance.now() - lastChecked < 1000) return;
       lastChecked = performance.now();
-      void refresh();
+      void check();
     }
     function activity(event: Event) {
       if (event.isTrusted && performance.now() - lastChecked >= 60000)
@@ -144,7 +148,7 @@ export function SessionProvider({
       document.removeEventListener("visibilitychange", revalidate);
       channel?.close();
     };
-  }, [pathname, refresh]);
+  }, [check, pathname]);
 
   const result = state.path === pathname ? state.result : CHECKING;
 
@@ -159,6 +163,10 @@ export function SessionProvider({
     const remaining = Date.parse(result.session.expiresAt) - Date.now();
     const timer = window.setTimeout(
       () => {
+        // An earlier background response must not restore an expired session.
+        const lifecycle = requests.current;
+        ++lifecycle.generation;
+        lifecycle.controller?.abort();
         setState({ path: pathname, result: { kind: "unauthenticated" } });
       },
       Math.max(0, Math.min(remaining, 2147483647)),
