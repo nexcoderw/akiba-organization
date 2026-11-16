@@ -126,6 +126,15 @@
   animation: card-enter 600ms var(--motion-ease) 80ms both;
 }
 
+.card:has([data-auth-notice]) {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  animation: none;
+}
+
 /* ---------- Motion ---------- */
 @keyframes card-enter {
   from {
