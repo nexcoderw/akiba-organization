@@ -16,7 +16,11 @@ export function AuthNotice({
   onRetryAction?: () => void | Promise<void>;
 }) {
   return (
-    <section className={styles.notice} aria-labelledby="session-notice-title">
+    <section
+      className={styles.notice}
+      aria-labelledby="session-notice-title"
+      data-auth-notice
+    >
       <span className={styles.icon}>
         <Icon name="warning" />
       </span>
