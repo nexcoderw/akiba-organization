@@ -29,6 +29,6 @@
   inline-size: 3rem;
   block-size: 3rem;
   border-radius: var(--radius-pill);
-  background: var(--ui-accent);
+  background: transparent;
   color: var(--ui-primary);
 }
