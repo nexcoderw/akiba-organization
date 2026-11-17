@@ -93,7 +93,6 @@
   font: inherit;
   font-size: 0.875rem;
   font-weight: var(--weight-medium);
-  text-decoration: underline;
   text-decoration-thickness: 0.08em;
   text-underline-offset: 0.25em;
   cursor: pointer;
@@ -102,8 +101,9 @@
     color 200ms ease;
 }
 .link:hover:not(:disabled) {
-  background: var(--ui-accent);
+  background: transparent;
   color: var(--ui-primary-hover);
+  text-decoration: underline;
 }
 .link:focus-visible {
   outline: 2px solid var(--ui-primary);
