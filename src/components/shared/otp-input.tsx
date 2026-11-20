@@ -57,7 +57,8 @@ export function OtpInput({
   useImperativeHandle(ref, () => inputRef.current as HTMLInputElement, []);
 
   const digits = value.slice(0, length).split("");
-  const active = focused && !disabled ? Math.min(digits.length, length - 1) : -1;
+  const active =
+    focused && !disabled ? Math.min(digits.length, length - 1) : -1;
 
   // Auto-submit once, when the last digit lands; re-arm when the code is edited or cleared.
   useEffect(() => {
@@ -71,7 +72,9 @@ export function OtpInput({
   }, [value, length, autoSubmit, disabled]);
 
   function handleChange(event: ChangeEvent<HTMLInputElement>) {
-    onValueChange(event.currentTarget.value.replace(/\D/g, "").slice(0, length));
+    onValueChange(
+      event.currentTarget.value.replace(/\D/g, "").slice(0, length),
+    );
   }
 
   // Digits are only ever added or removed at the end, so keep the caret there.
