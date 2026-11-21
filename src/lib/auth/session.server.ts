@@ -3,15 +3,19 @@ import "server-only";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { backendRequest, getAuthConfig } from "./backend.server";
-import { cookieNames } from "./policy";
-import { parseSession, safeProblem, type SessionResult } from "./contracts";
+import { ownerCookieNames } from "./policy";
+import {
+  parseOwnerSession,
+  safeProblem,
+  type SessionResult,
+} from "./contracts";
 
 /** React.cache deduplicates one server render only; never persist a principal across requests. */
 export const getSession = cache(async (): Promise<SessionResult> => {
   try {
     const config = getAuthConfig();
     const store = await cookies();
-    if (!store.has(cookieNames(config.secure).session))
+    if (!store.has(ownerCookieNames(config.secure).session))
       return { kind: "unauthenticated" };
     const result = await backendRequest("session", store.toString());
     if (result.status === 401) return { kind: "unauthenticated" };
@@ -20,7 +24,8 @@ export const getSession = cache(async (): Promise<SessionResult> => {
         kind: "denied",
         problem: safeProblem(403, result.body, "session"),
       };
-    const session = result.status === 200 ? parseSession(result.body) : null;
+    const session =
+      result.status === 200 ? parseOwnerSession(result.body) : null;
     if (session)
       return Date.parse(session.expiresAt) > Date.now()
         ? { kind: "authenticated", session }
@@ -37,12 +42,3 @@ export const getSession = cache(async (): Promise<SessionResult> => {
     return { kind: "unavailable", problem: safeProblem(503, null, "session") };
   }
 });
-
-export async function hasPendingChallenge() {
-  try {
-    const config = getAuthConfig();
-    return (await cookies()).has(cookieNames(config.secure).challenge);
-  } catch {
-    return false;
-  }
-}
