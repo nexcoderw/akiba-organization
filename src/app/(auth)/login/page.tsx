@@ -1,23 +1,16 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { AuthNotice } from "@/components/auth/auth-notice";
-import { LoginForm } from "@/components/auth/login-form";
-import { getSession, hasPendingChallenge } from "@/lib/auth/session.server";
-import { safeDestination } from "@/lib/auth/contracts";
+import { getSession } from "@/lib/auth/session.server";
 
 export const metadata = {
-  title: "Sign in · Akiba",
+  title: "Organization sign-in · Akiba",
   robots: { index: false, follow: false },
 };
 
-async function Login({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
-  const query = await searchParams;
+async function Login() {
   const result = await getSession();
-  if (result.kind === "authenticated") redirect(safeDestination(query.next));
+  if (result.kind === "authenticated") redirect("/");
   if (result.kind === "unavailable" || result.kind === "denied") {
     return (
       <AuthNotice
@@ -28,22 +21,18 @@ async function Login({
     );
   }
   return (
-    <LoginForm
-      pendingOnLoad={await hasPendingChallenge()}
-      expiredSession={query.expired === "1"}
-      next={safeDestination(query.next)}
+    <AuthNotice
+      title="Organization sign-in is unavailable"
+      message="Organization verification is still being set up. If you received an invitation, open the link in your email to review it."
+      retryable={false}
     />
   );
 }
 
-export default function LoginPage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
+export default function LoginPage() {
   return (
     <Suspense fallback={null}>
-      <Login searchParams={searchParams} />
+      <Login />
     </Suspense>
   );
 }
