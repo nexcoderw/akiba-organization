@@ -1,9 +1,12 @@
 export type MfaMethod = "totp" | "recovery_code" | "email_otp";
 
-export interface PlatformSession {
+export interface OwnerSession {
   displayName: string;
   email: string;
   expiresAt: string;
+}
+
+export interface PlatformSession extends OwnerSession {
   permissions: string[];
 }
 
@@ -27,7 +30,7 @@ export interface SafeProblem {
 }
 
 export type SessionResult =
-  | { kind: "authenticated"; session: PlatformSession }
+  | { kind: "authenticated"; session: OwnerSession }
   | { kind: "unauthenticated" }
   | { kind: "denied"; problem: SafeProblem }
   | { kind: "unavailable"; problem: SafeProblem };
@@ -155,6 +158,26 @@ function validExpiry(value: unknown): value is string {
   return shortText(value, 40) && Number.isFinite(Date.parse(value));
 }
 
+export function parseOwnerSession(value: unknown): OwnerSession | null {
+  if (
+    !isRecord(value) ||
+    value.assurance !== "aal2" ||
+    !shortText(value.userId, 100) ||
+    !Array.isArray(value.organizations) ||
+    value.organizations.length === 0 ||
+    !shortText(value.displayName, 200) ||
+    !shortText(value.email, 254) ||
+    !validExpiry(value.expiresAt)
+  ) {
+    return null;
+  }
+  return {
+    displayName: value.displayName,
+    email: value.email,
+    expiresAt: value.expiresAt,
+  };
+}
+
 function strings(value: unknown, limit: number): value is string[] {
   return (
     Array.isArray(value) &&
@@ -184,20 +207,18 @@ export function parseSession(value: unknown): PlatformSession | null {
   };
 }
 
-export function parsePublicSession(value: unknown): PlatformSession | null {
+export function parsePublicSession(value: unknown): OwnerSession | null {
   if (
     !isRecord(value) ||
     !shortText(value.displayName, 200) ||
     !shortText(value.email, 254) ||
-    !validExpiry(value.expiresAt) ||
-    !strings(value.permissions, 500)
+    !validExpiry(value.expiresAt)
   )
     return null;
   return {
     displayName: value.displayName,
     email: value.email,
     expiresAt: value.expiresAt,
-    permissions: value.permissions,
   };
 }
 
