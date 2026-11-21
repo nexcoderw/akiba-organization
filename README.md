@@ -1,6 +1,6 @@
-# Akiba Admin
+# Akiba Organization Portal
 
-Platform administration frontend using Next.js App Router, React, strict TypeScript and CSS Modules. Read [AGENTS.md](AGENTS.md) and the [.agents rules](.agents/README.md) before contributing.
+Organization frontend using Next.js App Router, React, strict TypeScript and CSS Modules. Read [AGENTS.md](AGENTS.md) and the [.agents rules](.agents/README.md) before contributing.
 
 ## Human-run commands
 
@@ -30,7 +30,7 @@ Start the frontend separately when needed:
 npm run dev
 ```
 
-## Platform authentication
+## Organization authentication
 
 ### UI icons
 
@@ -50,7 +50,7 @@ the agent. Follow `.agents/icons.md` for future icon changes.
 
 Authentication UI pages and their shared route layout live under src/app/(auth). The login file is src/app/(auth)/login/page.tsx; its URL remains /login. The group layout renders the reusable AuthScreen presentation once, including while the page checks the session.
 
-Authorized platform pages live under src/app/(platform), whose layout requires a verified full platform session. API handlers remain in src/app/api/auth. Route groups organize pages without changing URLs, and never replace backend permission checks.
+Protected organization pages live under src/app/(platform), whose layout requires a verified organization session. API handlers remain in src/app/api/auth. Route groups organize pages without changing URLs, and never replace backend permission checks.
 
 Akiba uses a light-only theme with primary color #3E0F8D and the Outfit variable font, optimized through next/font. The root loads one Latin font family with swap behavior; browsers receive self-hosted font assets rather than a Google stylesheet. Build-time font retrieval still requires an available font download/cache.
 
@@ -64,11 +64,10 @@ Copy `.env.local.example` to an untracked `.env.local` if it does not already ex
 
 Both `npm run dev` and `npm run start` select port 4001 by default. Run `npm run build` before `npm run start`.
 
-- `AKIBA_ADMIN_ORIGIN` is the Platform Admin origin for the existing platform authentication adapters. It must exactly match the API's `PLATFORM_ADMIN_ORIGIN`, including scheme and port.
+- `AKIBA_ORGANIZATION_PORTAL_ORIGIN` must match the exact origin opened in the browser and the API's organization portal configuration.
 - AKIBA_API_ORIGIN is the server-only upstream origin and must match the API's accepted API_PUBLIC_ORIGIN authority. It must resolve to the API, not back to Next. Do not configure an arbitrary internal authority that the API rejects.
-- In local HTTP development the API must use PLATFORM_AUTH_COOKIE_SECURE=false. HTTPS frontend origins require the API's secure cookie configuration. Production requires HTTPS for both origins and PLATFORM_AUTH_COOKIE_SECURE=true.
+- In local HTTP development the API must use OWNER_AUTH_COOKIE_SECURE=false. HTTPS frontend origins require the API's secure cookie configuration. Production requires HTTPS for both origins and OWNER_AUTH_COOKIE_SECURE=true.
 - .env.production.example contains deployment placeholders, not deployed hostnames. Provide verified values through the deployment environment.
-- Existing staff use normal sign-in. The first pending Platform Owner can complete the operator-authorized `/enroll/platform-owner` flow after the matching API and canonical database migration are deployed and verified. No browser action can reserve another owner or bypass authentication.
 
 ### Organization invitation preview
 
@@ -84,79 +83,22 @@ POST when the recipient selects **Check invitation**. Preview does not activate 
 production delivery disabled until the organization-specific MFA and acceptance flow is implemented
 and verified end to end.
 
-### First platform owner setup
+### Sign-in and session isolation
 
-The API operator first reserves the sole pending owner and explicitly sends an enrollment email
-through the configured Resend adapter. The fixed auth-group route `/enroll/platform-owner` uses the
-same light Outfit/primary-purple layout and shared controls as sign-in. The email includes a fixed
-setup-page link and a separate single-use setup code to paste into the form. The proof never enters
-a URL, browser history, server props or browser storage. Do not attach
-analytics, session replay, third-party QR services or link tracking to enrollment messages/pages.
+Organization sign-in and OTP verification require organization-specific MFA in the API. While
+it is unavailable, the login page displays a notice and the inherited login, verification and
+platform bootstrap adapters return 503 without contacting the API.
 
-The user explicitly continues, creates and confirms a 8-character-minimum password, manually enters
-the setup key into a time-based authenticator, then verifies a six-digit code. Activation displays ten
-recovery codes once, requires a local saved-codes acknowledgment and returns to `/login` for normal
-authentication with a fresh code. The acknowledgment is UI guidance, never identity proof. No admin
-session is issued during setup. Secrets remain only in short-lived UI memory and approved HttpOnly
-cookies; there is no localStorage or sessionStorage persistence.
+The portal checks verified owner sessions using `GET /api/v1/owner/auth/session` and revokes
+them using `POST /api/v1/owner/auth/logout`. Only the `akiba-owner-session` and `akiba-owner-csrf`
+cookies are forwarded, with the `__Host-` prefix on HTTPS. Logout uses the exact portal origin
+and the owner CSRF header. Platform Admin cookies can be present across localhost ports, so
+the portal filters them out regardless of port.
 
-Six fixed `/api/auth/enrollment/{exchange,status,password,setup,complete,cancel}` adapters enforce the
-exact browser Origin, bounded DTOs, approved cookies, no-store responses and matching CSRF for every
-operation after mailbox exchange. Upstream bodies are validated and reduced before reaching the
-browser; there is no generic proxy or caller-selected recipient/user/role. The API remains authoritative
-for pending-state eligibility, role binding, expiration, attempts and transactional activation.
-
-After a timeout, check setup status before resubmitting. Refresh can resume password/MFA progress;
-explicit key regeneration invalidates the previous unverified key and is limited by the API. An
-uncertain final activation goes to normal sign-in instead of replaying completion. If final recovery
-disclosure was lost, codes cannot be redisplayed; use approved authenticated MFA management to replace
-them. Expired or cancelled setup requires a fresh operator email. Never manually activate identities.
-
-Backend prerequisites: reviewed/applied `20261115120000_platform_owner_enrollment`, regenerated/built
-`@nexcoderw/akiba-db`, matching API, independent authentication/TOTP keys, verified Resend sender and
-`PLATFORM_OWNER_BOOTSTRAP_ENABLED=true` during enrollment only. Origins must match exactly. No new
-frontend secret or public feature flag is required. This flow still needs human formatting, checks,
-browser/keyboard/narrow-screen testing and a real development email round trip; no production readiness
-is claimed. Existing managed-owner/RLS and deployment release blockers remain.
-
-All browser authentication traffic is same-origin. Four fixed Next adapters contact the canonical API; no wildcard proxy or browser-visible upstream secret is introduced.
-
-| Browser route     | Method | Canonical API route              | Contract                                                                |
-| ----------------- | ------ | -------------------------------- | ----------------------------------------------------------------------- |
-| /api/auth/login   | POST   | /api/v1/platform/auth/login      | Email/password; MFA_REQUIRED, expiry and available methods              |
-| /api/auth/verify  | POST   | /api/v1/platform/auth/mfa/verify | Exactly one TOTP/recovery proof; authenticated or mfa_recovery_required |
-| /api/auth/session | GET    | /api/v1/platform/auth/me         | Full verified platform session; narrow safe profile returned            |
-| /api/auth/logout  | POST   | /api/v1/platform/auth/logout     | Server revocation and cookie clearing; 204 only on confirmation         |
-
-The API sets origin-bound HttpOnly challenge/session cookies and a readable double-submit CSRF cookie. The adapters validate exact browser Origin for mutations, compare CSRF cookie/header proofs for verification/logout and send the configured Origin upstream. Session GET requires a valid Origin or same-origin Fetch Metadata. No incoming Host, forwarded host, user IDs or permission headers establish authority. Cookie attributes and response shapes are checked before forwarding. Terminal MFA cookie clearing reaches the browser. Secrets and upstream CSRF response fields are not copied into browser JSON; only the CSRF cookie is intentionally JavaScript-readable.
-
-Requests and upstream responses have bounded bodies and timeouts; redirects are rejected. API problems are mapped to safe authored messages and correlation IDs. No raw exception/detail field is displayed. Authentication content is no-store and framing/referrer protections are configured. There is no shared session cache: React.cache deduplicates only one server render.
-
-### Login, MFA and protected pages
-
-/login checks the existing server session behind Suspense. A valid full session redirects to /. A confirmed missing/expired session shows the password form. A 403 shows access unavailable; temporary service failures show a retryable state. No private content streams before verification.
-
-The login form reuses shared Input, Form, Button and Icon, including a backward-compatible trailing password-visibility action. Validation follows login limits rather than imposing a new password-creation policy. Passwords remain in native form fields only, are never trimmed or stored in React/browser persistence, and are cleared when advancing to MFA. Submission gates block repeated clicks and Enter.
-
-Password success never grants workspace access. TOTP uses the real MFA endpoint, then /me must confirm a full session before a hard navigation clears the login navigation cache. Codes are not verified locally or persisted. A refreshed pending challenge may show the authenticator form based on HttpOnly cookie presence; that presence is only a UI hint, and the backend must validate every proof. The current API has no challenge-method introspection endpoint, so recovery choices after refresh require restarting password sign-in to retrieve the real available methods. Back to sign in clears local fields/state; it does not claim to revoke the backend challenge. Subsequent login replaces the browser proof; the backend enforces expiry and consumption.
-
-Recovery-code verification is supported when advertised by login, but its mfa_recovery_required result never opens /. The UI explains the restriction and offers confirmed server logout. Authenticator repair/enrollment settings are outside this milestone. Email OTP is intentionally not presented as full platform authentication: the backend cannot grant full authority through that method.
-
-The former starter page is now a verified account landing page under the (platform) route group. It shows only the current account identity; it does not implement dashboards, analytics or organization features. The group layout centralizes session protection, and the page also verifies its own data access through the shared server session helper. Future platform pages belong inside this group and must verify access near protected data reads/actions; a layout alone is insufficient.
-
-Only the existing / landing route is an approved post-login destination. External, encoded, protocol-relative, login-loop and unimplemented destinations fall back to /. Add future routes only with verified permission requirements.
-
-The client session provider blocks content during checks, discards obsolete results and revalidates on navigation, focus, page restoration, visibility return and meaningful user input (at most once per minute for activity checks). It deliberately does not poll an idle tab: the backend's /me refreshes idle expiry. Absolute expiration has a local timer; idle expiry/revocation is confirmed at the next real check/protected request. The API does not expose idleExpiresAt, so this UI does not manufacture an idle deadline or claim instantaneous server-revocation notification.
-
-Confirmed 401 responses invalidate the protected view; 403 and network/server errors remain distinct blocked states with retry. Logout confirms backend revocation before clearing the frontend view and hard-navigating to login. A sign-out BroadcastChannel notifies other open tabs without transmitting secrets. Deployment must configure trusted proxy/client-IP handling and edge rate limiting: these adapters do not forward untrusted client IP headers, so the backend may observe a shared frontend egress address.
-
-### Authentication verification
-
-The native unit suite in test/auth.test.mjs covers input contracts, full-session assurance, restricted recovery, safe errors, approved redirects, CSRF comparison, trusted origins and cookie isolation/attributes. It does not establish browser rendering, interaction accessibility or live backend guarantees. No checks have been executed by the agent.
-
-test/storage-policy.test.mjs exercises the configured ESLint restrictions against direct, qualified, bracket and destructured browser-storage access, while allowing transient in-memory state. These are authoring-policy checks rather than a browser sandbox; runtime authentication still depends on the canonical backend and protected cookies.
-
-After running format:check, lint, npm test and build, manually verify the real flow against a permitted development API: password failure/success, TOTP failure/success/expiry, refresh with pending MFA, required labels and visibility toggle, rapid repeated submissions, restricted recovery, existing-session redirects, server revocation/expiration, safe retry after network failure, 403 handling, confirmed logout, multiple tabs, narrow layouts, keyboard/focus, reduced motion and the light theme even with a dark operating-system preference. Browser/component automation and deployed end-to-end verification remain outstanding; no frontend test framework was installed.
+Run `npm run format:check && npm run lint && npm test && npm run build`. With a local portal
+running, check that a browser signed in to Admin still sees the organization sign-in notice,
+can open the invitation preview, and retains its Admin session. A second dev command for the
+same checkout may exit while the original server continues to serve `http://localhost:4001`.
 
 ## Shared components
 
