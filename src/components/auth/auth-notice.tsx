@@ -9,11 +9,13 @@ export function AuthNotice({
   message = "The service is temporarily unavailable. Check your connection and try again.",
   requestId,
   onRetryAction,
+  retryable = true,
 }: {
   title?: string;
   message?: string;
   requestId?: string;
   onRetryAction?: () => void | Promise<void>;
+  retryable?: boolean;
 }) {
   return (
     <section
@@ -26,12 +28,14 @@ export function AuthNotice({
       </span>
       <h1 id="session-notice-title">{title}</h1>
       <p role="status">{message}</p>
-      <Button
-        variant="secondary"
-        onClick={onRetryAction ?? (() => window.location.reload())}
-      >
-        Try again
-      </Button>
+      {retryable && (
+        <Button
+          variant="secondary"
+          onClick={onRetryAction ?? (() => window.location.reload())}
+        >
+          Try again
+        </Button>
+      )}
       {requestId && <small>Reference: {requestId}</small>}
     </section>
   );
