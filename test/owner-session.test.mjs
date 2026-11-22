@@ -29,7 +29,10 @@ test("organization logout accepts only clearing its two cookies", () => {
   const { session, csrf } = ownerCookieNames(true);
   const attributes =
     "; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Secure; SameSite=Strict";
-  const clears = [`${session}=${attributes}; HttpOnly`, `${csrf}=${attributes}`];
+  const clears = [
+    `${session}=${attributes}; HttpOnly`,
+    `${csrf}=${attributes}`,
+  ];
   assert.deepEqual(approvedOwnerCookieClears(clears, true), clears);
   assert.throws(() =>
     approvedOwnerCookieClears(
