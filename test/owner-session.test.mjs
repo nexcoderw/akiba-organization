@@ -17,7 +17,9 @@ test("organization requests forward owner cookies only", () => {
       `${prefix}akiba-platform-challenge=${token}`,
     ].join("; ");
     const owner = `${session}=${token}.${token}; ${csrf}=${token}`;
-    assert.deepEqual(ownerCookies(platform, secure), { header: "" });
+    const filtered = ownerCookies(platform, secure);
+    assert.equal(filtered.header, "");
+    assert.equal(filtered.csrf, undefined);
     assert.deepEqual(ownerCookies(`${platform}; ${owner}`, secure), {
       header: owner,
       csrf: token,
