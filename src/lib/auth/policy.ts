@@ -49,6 +49,14 @@ export function cookieNames(secure: boolean) {
   };
 }
 
+export function ownerCookieNames(secure: boolean) {
+  const prefix = secure ? "__Host-" : "";
+  return {
+    session: `${prefix}akiba-owner-session`,
+    csrf: `${prefix}akiba-owner-csrf`,
+  };
+}
+
 export function browserOriginAllowed(
   headers: Headers,
   expected: string,
@@ -66,8 +74,18 @@ export function platformCookies(
   header: string,
   secure: boolean,
 ): { header: string; csrf?: string } {
-  if (header.length > 16384) throw new Error("Invalid platform cookies.");
-  const names = cookieNames(secure);
+  return readCookies(header, cookieNames(secure));
+}
+
+export function ownerCookies(header: string, secure: boolean) {
+  return readCookies(header, ownerCookieNames(secure));
+}
+
+function readCookies(
+  header: string,
+  names: { session: string; csrf: string },
+): { header: string; csrf?: string } {
+  if (header.length > 16384) throw new Error("Invalid authentication cookies.");
   const allowed = new Set(Object.values(names));
   const seen = new Set<string>();
   const pairs: string[] = [];
@@ -82,7 +100,7 @@ export function platformCookies(
       value.length > 340 ||
       !/^[A-Za-z0-9_.-]*$/u.test(value)
     )
-      throw new Error("Invalid platform cookies.");
+      throw new Error("Invalid authentication cookies.");
     seen.add(name);
     pairs.push(`${name}=${value}`);
     if (name === names.csrf) csrf = value;
@@ -94,8 +112,23 @@ export function approvedSetCookies(
   values: string[],
   secure: boolean,
 ): string[] {
+  return validateSetCookies(values, secure, cookieNames(secure));
+}
+
+export function approvedOwnerCookieClears(values: string[], secure: boolean) {
+  if (values.length !== 2) {
+    throw new Error("Invalid owner cookie clearing.");
+  }
+  return validateSetCookies(values, secure, ownerCookieNames(secure), true);
+}
+
+function validateSetCookies(
+  values: string[],
+  secure: boolean,
+  names: { session: string; csrf: string; challenge?: string; stepUp?: string },
+  clearOnly = false,
+) {
   if (values.length > 4) throw new Error("Invalid upstream cookies.");
-  const names = cookieNames(secure);
   const allowed = new Set(Object.values(names));
   const seen = new Set<string>();
   return values.map((cookie) => {
@@ -109,6 +142,7 @@ export function approvedSetCookies(
       at < 1 ||
       !allowed.has(name) ||
       seen.has(name) ||
+      (clearOnly && value !== "") ||
       value.length > 340 ||
       !/^[A-Za-z0-9_.-]*$/u.test(value)
     )
@@ -139,6 +173,7 @@ export function approvedSetCookies(
       attributes.has("httponly") !== (name !== names.csrf) ||
       !attributes.has("expires") ||
       !Number.isFinite(Date.parse(attributes.get("expires") ?? "")) ||
+      (clearOnly && Number(attributes.get("max-age") ?? 0) > 0) ||
       (attributes.has("max-age") &&
         !/^-?\d+$/u.test(attributes.get("max-age") ?? ""))
     )

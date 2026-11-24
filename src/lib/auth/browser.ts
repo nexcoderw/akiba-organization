@@ -7,7 +7,7 @@ import {
   type AuthOperation,
   type SafeProblem,
 } from "./contracts";
-import { cookieNames } from "./policy";
+import { ownerCookieNames } from "./policy";
 
 export class AuthRequestError extends Error {
   readonly problem: SafeProblem;
@@ -19,7 +19,7 @@ export class AuthRequestError extends Error {
 }
 
 function csrfToken() {
-  const name = cookieNames(window.location.protocol === "https:").csrf;
+  const name = ownerCookieNames(window.location.protocol === "https:").csrf;
   const matches = document.cookie
     .split(";")
     .map((part) => part.trim())
@@ -65,7 +65,7 @@ export async function authRequest(
             },
       );
     }
-    headers.set("x-platform-csrf-token", csrf);
+    headers.set("x-owner-csrf-token", csrf);
   }
   let response: Response;
   try {
@@ -147,7 +147,7 @@ export async function endSession() {
   await authRequest("logout");
   const channel =
     typeof BroadcastChannel !== "undefined"
-      ? new BroadcastChannel("akiba-platform-session")
+      ? new BroadcastChannel("akiba-owner-session")
       : null;
   channel?.postMessage("signed-out");
   channel?.close();

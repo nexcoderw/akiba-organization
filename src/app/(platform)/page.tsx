@@ -38,17 +38,14 @@ async function AccountLanding() {
       </header>
       <section className={styles.welcome}>
         <div className={styles.status}>
-          <Icon name="check" /> Verified platform session
+          <Icon name="check" /> Verified organization session
         </div>
         <h1>Welcome back, {result.session.displayName}.</h1>
-        <p>You&apos;re signed in to Akiba Platform Administration.</p>
+        <p>You&apos;re signed in to the Akiba Organization Portal.</p>
         <p className={styles.account}>{result.session.email}</p>
         <div className={styles.note}>
           <Icon name="lock" />
-          <p>
-            Your access is verified by the platform. Administrative features
-            will appear here as they become available.
-          </p>
+          <p>Your session is tied to your organization access.</p>
         </div>
       </section>
     </main>

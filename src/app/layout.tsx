@@ -10,8 +10,8 @@ const outfit = Outfit({
 });
 
 export const metadata: Metadata = {
-  title: "Akiba Platform Administration",
-  description: "Secure access to Akiba platform administration.",
+  title: "Akiba Organization Portal",
+  description: "Secure access to your organization in Akiba.",
   robots: { index: false, follow: false },
 };
 

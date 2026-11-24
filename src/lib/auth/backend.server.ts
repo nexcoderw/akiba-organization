@@ -1,11 +1,10 @@
 import "server-only";
 
-import { AUTH_PATHS, ENROLLMENT_PATHS, type AuthOperation } from "./contracts";
-import { approvedSetCookies, authConfig, platformCookies } from "./policy";
+import { approvedOwnerCookieClears, authConfig, ownerCookies } from "./policy";
 
 export function getAuthConfig() {
   return authConfig(
-    process.env.AKIBA_ADMIN_ORIGIN,
+    process.env.AKIBA_ORGANIZATION_PORTAL_ORIGIN,
     process.env.AKIBA_API_ORIGIN,
     process.env.NODE_ENV === "production",
   );
@@ -50,37 +49,35 @@ export async function boundedJson(
 }
 
 export async function backendRequest(
-  operation: AuthOperation,
+  operation: "session" | "logout",
   cookie: string,
-  body?: unknown,
   csrf?: string,
 ) {
   const config = getAuthConfig();
-  const incoming = platformCookies(cookie, config.secure);
+  const incoming = ownerCookies(cookie, config.secure);
   const headers = new Headers({
     Accept: "application/json, application/problem+json",
     Origin: config.adminOrigin,
   });
   if (incoming.header) headers.set("Cookie", incoming.header);
-  if (body !== undefined) headers.set("Content-Type", "application/json");
-  if (csrf) headers.set("x-platform-csrf-token", csrf);
+  if (csrf) headers.set("x-owner-csrf-token", csrf);
   const response = await fetch(
-    config.apiOrigin + { ...AUTH_PATHS, ...ENROLLMENT_PATHS }[operation],
+    `${config.apiOrigin}/api/v1/owner/auth/${operation}`,
     {
       method: operation === "session" ? "GET" : "POST",
       headers,
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       cache: "no-store",
       redirect: "error",
       signal: AbortSignal.timeout(25000),
     },
   );
-  const setCookies = approvedSetCookies(
-    response.headers.getSetCookie(),
-    config.secure,
-  );
-  if (response.status === 204)
-    return { status: 204, body: null, cookies: setCookies };
+  if (operation === "logout" && response.status === 204) {
+    const cookies = approvedOwnerCookieClears(
+      response.headers.getSetCookie(),
+      config.secure,
+    );
+    return { status: 204, body: null, cookies };
+  }
   const contentType = response.headers
     .get("content-type")
     ?.split(";")[0]
@@ -93,6 +90,6 @@ export async function backendRequest(
   return {
     status: response.status,
     body: await boundedJson(response),
-    cookies: setCookies,
+    cookies: [],
   };
 }

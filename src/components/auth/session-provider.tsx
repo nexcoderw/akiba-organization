@@ -14,14 +14,14 @@ import { readSession } from "@/lib/auth/browser";
 import {
   safeDestination,
   safeProblem,
-  type PlatformSession,
+  type OwnerSession,
   type SessionResult,
 } from "@/lib/auth/contracts";
 import { LoadingState } from "@/components/shared/loading-state";
 import { AuthNotice } from "./auth-notice";
 import styles from "./session-provider.module.css";
 
-const SessionContext = createContext<PlatformSession | null>(null);
+const SessionContext = createContext<OwnerSession | null>(null);
 type State = { path: string; result: SessionResult | { kind: "checking" } };
 const CHECKING = { kind: "checking" } as const;
 
@@ -34,7 +34,7 @@ export function SessionProvider({
   initialSession,
   children,
 }: {
-  initialSession: PlatformSession;
+  initialSession: OwnerSession;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -130,7 +130,7 @@ export function SessionProvider({
     window.addEventListener("keydown", activity);
     const channel =
       typeof BroadcastChannel !== "undefined"
-        ? new BroadcastChannel("akiba-platform-session")
+        ? new BroadcastChannel("akiba-owner-session")
         : null;
     if (channel)
       channel.onmessage = (event: MessageEvent<unknown>) => {
@@ -200,8 +200,8 @@ export function SessionProvider({
   );
 }
 
-export function usePlatformSession() {
+export function useOwnerSession() {
   const session = useContext(SessionContext);
-  if (!session) throw new Error("A verified platform session is required.");
+  if (!session) throw new Error("A verified organization session is required.");
   return session;
 }
