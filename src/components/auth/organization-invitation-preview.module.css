@@ -1,0 +1,18 @@
+.panel {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+  color: var(--ui-muted);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.title {
+  color: var(--ui-text);
+  font-size: clamp(1.75rem, 5vw, 2.25rem);
+  line-height: 1.15;
+}
+
+.error {
+  color: var(--ui-danger);
+}
