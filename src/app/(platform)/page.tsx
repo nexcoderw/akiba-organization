@@ -9,6 +9,9 @@ import { Icon } from "@/components/shared/icon";
 import { LoadingState } from "@/components/shared/loading-state";
 import styles from "./page.module.css";
 
+// The workspace may redirect after checking the request's organization session.
+export const instant = false;
+
 async function AccountLanding() {
   const result = await getSession();
   if (result.kind === "unauthenticated") redirect("/login?expired=1&next=%2F");
