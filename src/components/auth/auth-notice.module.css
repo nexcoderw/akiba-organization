@@ -1,34 +1,230 @@
+/* ---------- Card ---------- */
 .notice {
+  position: relative;
   display: grid;
   justify-items: start;
   align-content: center;
-  gap: 1rem;
+  gap: 1.25rem;
   min-block-size: 14rem;
+  padding: clamp(1.5rem, 4vw, 2.25rem);
+  border-radius: 1.25rem;
   color: var(--ui-text);
+  overflow: hidden;
+  animation: notice-enter 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-.notice h1 {
+
+/* Thin accent line along the top edge, drawn in once on load */
+.notice::before {
+  content: "";
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 0;
+  block-size: 2px;
+  background: linear-gradient(
+    90deg,
+    var(--ui-primary),
+    color-mix(in srgb, var(--ui-primary) 0%, transparent)
+  );
+  transform-origin: left;
+  animation: notice-line 900ms 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ---------- Icon (the one memorable moment) ---------- */
+.icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  inline-size: 3.25rem;
+  block-size: 3.25rem;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--ui-primary) 12%, transparent);
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--ui-primary) 28%, transparent);
+  color: var(--ui-primary);
+  animation: icon-pop 600ms 120ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* Soft pulse ring that radiates outward to draw the eye */
+.icon::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid var(--ui-primary);
+  opacity: 0;
+  animation: icon-pulse 2.6s 900ms ease-out infinite;
+}
+
+/* ---------- Text ---------- */
+.content {
+  display: grid;
+  gap: 0.5rem;
+  animation: notice-rise 520ms 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.title {
   font-size: var(--text-h2);
   font-weight: 600;
   letter-spacing: -0.04em;
   line-height: 1.2;
+  text-wrap: balance;
 }
-.notice p {
+
+.message {
   max-inline-size: 30rem;
   color: var(--ui-muted);
   font-size: 0.9375rem;
   line-height: 1.7;
+  text-wrap: pretty;
 }
-.notice small {
+
+/* ---------- Actions ---------- */
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.25rem;
+  inline-size: 100%;
+  animation: notice-rise 520ms 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.buttonLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.spinner {
+  inline-size: 0.875rem;
+  block-size: 0.875rem;
+  border: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-block-start-color: currentColor;
+  border-radius: 50%;
+  animation: spin 700ms linear infinite;
+}
+
+/* ---------- Reference ---------- */
+.reference {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-inline-size: 0;
+  padding-block: 0.25rem;
+  padding-inline: 0.75rem 0.25rem;
+  border: 1px solid var(--notice-border);
+  border-radius: var(--radius-pill);
+}
+
+.referenceText {
   color: var(--ui-muted);
   font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
-.icon {
-  display: grid;
-  place-items: center;
-  inline-size: 3rem;
-  block-size: 3rem;
+
+.copy {
+  flex-shrink: 0;
+  padding: 0.25rem 0.625rem;
+  border: 0;
   border-radius: var(--radius-pill);
   background: transparent;
-  color: var(--ui-primary);
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.copy:hover {
+  background: color-mix(in srgb, var(--ui-text) 8%, transparent);
+}
+
+.copy:focus-visible {
+  outline: 2px solid var(--ui-primary);
+  outline-offset: 2px;
+}
+
+/* ---------- Keyframes ---------- */
+@keyframes notice-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes notice-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes notice-line {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes icon-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6) rotate(-8deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes icon-pulse {
+  0% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- Accessibility ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .notice,
+  .notice::before,
+  .icon,
+  .content,
+  .footer {
+    animation: none;
+  }
+
+  .icon::after {
+    animation: none;
+    opacity: 0;
+  }
+
+  /* Keep the spinner so loading state is still visible, just slower */
+  .spinner {
+    animation-duration: 1800ms;
+  }
 }
