@@ -79,15 +79,16 @@ delivery service. For local preview using the API's fixed default portal origin,
 Production requires an approved HTTPS portal origin.
 
 The page clears the email link fragment from the address bar and sends the proof in a same-origin
-POST when the recipient selects **Check invitation**. Preview does not activate membership. Keep
-production delivery disabled until the organization-specific MFA and acceptance flow is implemented
-and verified end to end.
+POST when the recipient selects **Check invitation**. **Continue to setup** starts enrollment.
+The recipient creates or confirms a password, enters the emailed code, and accepts the invitation.
+Delivery still requires the API's reviewed production worker and public HTTPS portal.
 
 ### Sign-in and session isolation
 
-Organization sign-in and OTP verification require organization-specific MFA in the API. While
-it is unavailable, the login page displays a notice and the inherited login, verification and
-platform bootstrap adapters return 503 without contacting the API.
+The portal uses password plus email OTP for organization owners. The API must have the reviewed
+organization OTP migration applied and `OWNER_AUTH_EMAIL_OTP_ENABLED=true`. The browser receives an
+owner session only after verification. An account with no active owner membership in the selected
+portal receives an account-not-found message and no email.
 
 The portal checks verified owner sessions using `GET /api/v1/owner/auth/session` and revokes
 them using `POST /api/v1/owner/auth/logout`. Only the `akiba-owner-session` and `akiba-owner-csrf`
@@ -96,8 +97,8 @@ and the owner CSRF header. Platform Admin cookies can be present across localhos
 the portal filters them out regardless of port.
 
 Run `npm run format:check && npm run lint && npm test && npm run build`. With a local portal
-running, check that a browser signed in to Admin still sees the organization sign-in notice,
-can open the invitation preview, and retains its Admin session. A second dev command for the
+running, sign in to Admin and the organization portal in the same browser. Confirm each portal
+keeps its own session and signing out of the organization does not sign out Admin. A second dev command for the
 same checkout may exit while the original server continues to serve `http://localhost:4001`.
 
 ## Shared components

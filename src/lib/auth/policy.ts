@@ -122,11 +122,23 @@ export function approvedOwnerCookieClears(values: string[], secure: boolean) {
   return validateSetCookies(values, secure, ownerCookieNames(secure), true);
 }
 
+export function approvedOwnerSessionCookies(values: string[], secure: boolean) {
+  if (values.length !== 2) throw new Error("Invalid owner session cookies.");
+  return validateSetCookies(
+    values,
+    secure,
+    ownerCookieNames(secure),
+    false,
+    true,
+  );
+}
+
 function validateSetCookies(
   values: string[],
   secure: boolean,
   names: { session: string; csrf: string; challenge?: string; stepUp?: string },
   clearOnly = false,
+  ownerSession = false,
 ) {
   if (values.length > 4) throw new Error("Invalid upstream cookies.");
   const allowed = new Set(Object.values(names));
@@ -143,6 +155,7 @@ function validateSetCookies(
       !allowed.has(name) ||
       seen.has(name) ||
       (clearOnly && value !== "") ||
+      (ownerSession && value === "") ||
       value.length > 340 ||
       !/^[A-Za-z0-9_.-]*$/u.test(value)
     )
@@ -166,13 +179,17 @@ function validateSetCookies(
         throw new Error("Invalid upstream cookie.");
       attributes.set(attr, rest.join("="));
     }
+    const expiry = Date.parse(attributes.get("expires") ?? "");
     if (
       attributes.get("path") !== "/" ||
       attributes.get("samesite")?.toLowerCase() !== "strict" ||
       attributes.has("secure") !== secure ||
       attributes.has("httponly") !== (name !== names.csrf) ||
       !attributes.has("expires") ||
-      !Number.isFinite(Date.parse(attributes.get("expires") ?? "")) ||
+      !Number.isFinite(expiry) ||
+      (ownerSession &&
+        (expiry <= Date.now() ||
+          Number(attributes.get("max-age") ?? 1) <= 0)) ||
       (clearOnly && Number(attributes.get("max-age") ?? 0) > 0) ||
       (attributes.has("max-age") &&
         !/^-?\d+$/u.test(attributes.get("max-age") ?? ""))
@@ -182,9 +199,11 @@ function validateSetCookies(
       const proof = name === names.challenge || name === names.stepUp;
       if (
         !(
-          proof
-            ? /^v1\.[A-Za-z0-9_-]{32,256}\.[a-f0-9]{64}$/u
-            : /^[A-Za-z0-9_-]{32,256}$/u
+          ownerSession && name === names.session
+            ? /^[A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]{43}$/u
+            : proof
+              ? /^v1\.[A-Za-z0-9_-]{32,256}\.[a-f0-9]{64}$/u
+              : /^[A-Za-z0-9_-]{32,256}$/u
         ).test(value)
       )
         throw new Error("Invalid upstream cookie.");

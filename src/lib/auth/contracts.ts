@@ -161,7 +161,7 @@ function validExpiry(value: unknown): value is string {
 export function parseOwnerSession(value: unknown): OwnerSession | null {
   if (
     !isRecord(value) ||
-    value.assurance !== "aal2" ||
+    (value.assurance !== "aal2" && value.assurance !== "password_email_otp") ||
     !shortText(value.userId, 100) ||
     !Array.isArray(value.organizations) ||
     value.organizations.length === 0 ||

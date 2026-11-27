@@ -3,6 +3,7 @@ import test from "node:test";
 import { parseOwnerSession } from "../src/lib/auth/contracts.ts";
 import {
   approvedOwnerCookieClears,
+  approvedOwnerSessionCookies,
   ownerCookieNames,
   ownerCookies,
 } from "../src/lib/auth/policy.ts";
@@ -61,4 +62,26 @@ test("organization sessions require owner assurance and membership", () => {
     null,
   );
   assert.deepEqual(parseOwnerSession({ ...owner, assurance: "aal2" }), session);
+  assert.deepEqual(
+    parseOwnerSession({ ...owner, assurance: "password_email_otp" }),
+    session,
+  );
+});
+
+test("organization accepts only a sealed owner cookie and its CSRF companion", () => {
+  const { session, csrf } = ownerCookieNames(true);
+  const token = "a".repeat(43);
+  const attributes =
+    "; Path=/; Expires=Fri, 01 Jan 2100 00:00:00 GMT; Secure; SameSite=Strict";
+  const cookies = [
+    `${session}=${token}.${token}${attributes}; HttpOnly`,
+    `${csrf}=${token}${attributes}`,
+  ];
+  assert.deepEqual(approvedOwnerSessionCookies(cookies, true), cookies);
+  assert.throws(() =>
+    approvedOwnerSessionCookies(
+      [cookies[0].replace("owner-session", "platform-session"), cookies[1]],
+      true,
+    ),
+  );
 });

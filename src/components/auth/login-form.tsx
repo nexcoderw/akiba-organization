@@ -3,458 +3,196 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/shared/button";
 import { Form } from "@/components/shared/form";
-import { Icon } from "@/components/shared/icon";
 import { Input } from "@/components/shared/input";
 import { OtpInput } from "@/components/shared/otp-input";
-import { useToast } from "@/components/shared/toast";
-import { LoadingState } from "@/components/shared/loading-state";
-import {
-  AuthRequestError,
-  readSession,
-  startLogin,
-  verifyMfa,
-} from "@/lib/auth/browser";
-import {
-  loginErrors,
-  safeDestination,
-  validVerificationBody,
-  type Challenge,
-} from "@/lib/auth/contracts";
-import { LogoutButton } from "./logout-button";
+import { readSession, requestOwnerFlow } from "@/lib/auth/browser";
+import { isRecord } from "@/lib/auth/contracts";
+import { isInvitationToken } from "@/lib/auth/invitation-preview";
 import styles from "./login-form.module.css";
 
-type Step = { kind: "password" } | { kind: "otp"; challenge: Challenge | null };
+export interface EnrollmentStart {
+  nextStep: "register" | "sign_in";
+  token: string;
+  organizationName: string;
+}
 
-type VerificationState =
-  "input" | "verifying" | "checking-session" | "retry" | "recovery-required";
-
-export function LoginForm({
-  pendingOnLoad,
-  expiredSession,
-  next,
-}: {
-  pendingOnLoad: boolean;
-  expiredSession: boolean;
-  next: string;
-}) {
-  const [step, setStep] = useState<Step>(
-    pendingOnLoad ? { kind: "otp", challenge: null } : { kind: "password" },
-  );
-  const [verificationState, setVerificationState] =
-    useState<VerificationState>("input");
-  const [visible, setVisible] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [method, setMethod] = useState<"totp" | "recovery_code">("totp");
-  const [fields, setFields] = useState<{
-    email?: string;
-    password?: string;
-    code?: string;
-  }>({});
-  const toast = useToast();
-  const errorToastId = useRef<number | undefined>(undefined);
-  const expirationNoticeShown = useRef(false);
-  const [challengeExpired, setChallengeExpired] = useState(false);
-  const [otp, setOtp] = useState("");
-  const email = useRef<HTMLInputElement>(null);
-  const password = useRef<HTMLInputElement>(null);
-  const code = useRef<HTMLInputElement>(null);
+export function LoginForm({ invitation }: { invitation?: EnrollmentStart }) {
+  const [emailChallenge, setEmailChallenge] = useState<string>();
+  const [enrollmentAuthenticated, setEnrollmentAuthenticated] = useState(false);
+  const [accepted, setAccepted] = useState(false);
+  const [code, setCode] = useState("");
+  const [error, setError] = useState<string>();
   const heading = useRef<HTMLHeadingElement>(null);
+  const codeRequested = emailChallenge !== undefined;
 
   useEffect(() => {
-    if (
-      !expiredSession ||
-      step.kind !== "password" ||
-      expirationNoticeShown.current
-    ) {
-      return;
-    }
-    expirationNoticeShown.current = true;
-    toast.info("Your session ended. Sign in again to continue.");
-  }, [expiredSession, step.kind, toast]);
+    if (codeRequested || accepted) heading.current?.focus();
+  }, [accepted, codeRequested]);
 
-  useEffect(() => {
-    if (step.kind !== "password") heading.current?.focus();
-    if (step.kind !== "otp" || !step.challenge) return;
-    const timer = window.setTimeout(
-      () => setChallengeExpired(true),
-      Math.max(
-        0,
-        Math.min(Date.parse(step.challenge.expiresAt) - Date.now(), 2147483647),
-      ),
-    );
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [step]);
-
-  function clearErrorToast() {
-    if (errorToastId.current === undefined) return;
-    toast.dismiss(errorToastId.current);
-    errorToastId.current = undefined;
-  }
-
-  function showError(message: string) {
-    clearErrorToast();
-    errorToastId.current = toast.error(message);
-  }
-
-  function showRequestError(error: unknown) {
-    showError(
-      error instanceof AuthRequestError
-        ? error.problem.message
-        : "The service is temporarily unavailable. Please try again.",
+  function showError(value: unknown) {
+    setError(
+      value instanceof Error
+        ? value.message
+        : "We couldn't complete this step.",
     );
   }
 
-  async function confirmSession() {
-    clearErrorToast();
-    setVerificationState("checking-session");
-    const result = await readSession();
-    if (result.kind === "authenticated") {
-      window.location.replace(safeDestination(next));
-      return;
-    } else if (result.kind === "denied" || result.kind === "unavailable") {
-      showError(result.problem.message);
-    } else {
-      showError(
-        "Your session couldn't be confirmed. Start again or retry the session check.",
-      );
-    }
-    setVerificationState("retry");
-  }
-
-  async function retrySessionCheck() {
-    if (busy) return;
-    setBusy(true);
+  async function submit(data: FormData) {
+    setError(undefined);
     try {
-      await confirmSession();
-    } finally {
-      setBusy(false);
+      if (emailChallenge) {
+        if (invitation) {
+          await requestOwnerFlow("accept", {
+            challengeToken: invitation.token,
+            emailOtpToken: emailChallenge,
+            code,
+          });
+          setCode("");
+          setEmailChallenge(undefined);
+          setAccepted(true);
+          return;
+        }
+        await requestOwnerFlow("verify", { token: emailChallenge, code });
+        if ((await readSession()).kind !== "authenticated")
+          throw new Error(
+            "Your session could not be confirmed. Start sign-in again.",
+          );
+        window.location.replace("/");
+        return;
+      }
+
+      const password = String(data.get("password") ?? "");
+      if (invitation && !enrollmentAuthenticated) {
+        await requestOwnerFlow(
+          invitation.nextStep === "register" ? "register" : "existing",
+          {
+            challengeToken: invitation.token,
+            password,
+            ...(invitation.nextStep === "register"
+              ? { displayName: String(data.get("displayName") ?? "") }
+              : {}),
+          },
+        );
+        setEnrollmentAuthenticated(true);
+      }
+
+      const challenge = invitation
+        ? await requestOwnerFlow("send-code", {})
+        : await requestOwnerFlow("login", {
+            email: String(data.get("email") ?? ""),
+            password,
+          });
+      if (!isRecord(challenge) || !isInvitationToken(challenge.token))
+        throw new Error("We couldn't confirm that a code was sent.");
+      setCode("");
+      setEmailChallenge(challenge.token);
+    } catch (value) {
+      setCode("");
+      showError(value);
     }
   }
 
-  function restart() {
-    if (busy) return;
-    if (code.current) code.current.value = "";
-    clearErrorToast();
-    setOtp("");
-    setFields({});
-    setVisible(false);
-    setChallengeExpired(false);
-    setMethod("totp");
-    setVerificationState("input");
-    setStep({ kind: "password" });
-  }
-
-  const title =
-    step.kind === "password" ? "Welcome back" : "Verify your sign-in";
-  const methods =
-    step.kind === "otp" ? (step.challenge?.methods ?? ["totp"]) : [];
-  const canVerify =
-    methods.includes("totp") || methods.includes("recovery_code");
-
-  if (
-    verificationState === "verifying" ||
-    verificationState === "checking-session"
-  ) {
-    return (
-      <LoadingState
-        phase={
-          verificationState === "verifying"
-            ? "mfa-verification"
-            : "session-check"
-        }
-      />
-    );
-  }
+  const registering = invitation?.nextStep === "register";
+  const needsPassword = !emailChallenge && !enrollmentAuthenticated;
+  const title = accepted
+    ? "Invitation accepted"
+    : emailChallenge
+      ? "Enter your email code"
+      : invitation
+        ? "Set up organization access"
+        : "Sign in to your organization";
 
   return (
-    <div className={styles.login}>
+    <section className={styles.login}>
       <header className={styles.header}>
         <h1 ref={heading} tabIndex={-1}>
           {title}
         </h1>
-        <p>
-          {step.kind === "password"
-            ? "Sign in to your Akiba administration workspace."
-            : verificationState === "recovery-required"
-              ? "Your recovery proof was accepted, but authenticator recovery must be completed before you can continue."
-              : verificationState === "retry"
-                ? "Your verification was received. Confirm your platform session before continuing."
-                : method === "totp"
-                  ? "Enter the six-digit code from your authenticator app."
-                  : "Enter one of your unused recovery codes."}
-        </p>
+        {accepted ? (
+          <p>Sign in once {invitation?.organizationName} is active.</p>
+        ) : emailChallenge ? (
+          <p>
+            Enter the six-digit code we sent to your email. It expires within
+            five minutes.
+          </p>
+        ) : invitation ? (
+          <p>Complete setup for {invitation.organizationName}.</p>
+        ) : (
+          <p>Use your organization email and password.</p>
+        )}
       </header>
-      {step.kind === "password" && (
-        <Form
-          className={styles.form}
-          noValidate
-          onSubmitAction={async (data) => {
-            clearErrorToast();
-            const emailValue =
-              typeof data.get("email") === "string"
-                ? String(data.get("email"))
-                : "";
-            const passwordValue =
-              typeof data.get("password") === "string"
-                ? String(data.get("password"))
-                : "";
-            const errors = loginErrors(emailValue, passwordValue);
-            setFields(errors);
-            if (errors.email || errors.password) {
-              toast.warning("Please check the highlighted fields.");
-              (errors.email ? email.current : password.current)?.focus();
-              return;
-            }
-            setBusy(true);
-            try {
-              const challenge = await startLogin(
-                emailValue.trim(),
-                passwordValue,
-              );
-              if (password.current) password.current.value = "";
-              setVisible(false);
-              setChallengeExpired(false);
-              setMethod(
-                challenge.methods.includes("totp") ? "totp" : "recovery_code",
-              );
-              setVerificationState("input");
-              setStep({ kind: "otp", challenge });
-            } catch (error: unknown) {
-              showRequestError(error);
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          <Input
-            ref={email}
-            id="login-email"
-            name="email"
-            type="email"
-            label="Email address"
-            autoComplete="username"
-            autoCapitalize="none"
-            spellCheck={false}
-            required
-            maxLength={254}
-            placeholder="you@company.com"
-            error={fields.email}
-          />
-          <Input
-            ref={password}
-            id="login-password"
-            name="password"
-            type={visible ? "text" : "password"}
-            label="Password"
-            autoComplete="current-password"
-            required
-            maxLength={4096}
-            placeholder="Enter your password"
-            icon={<Icon name="lock" />}
-            error={fields.password}
-            trailingAction={
-              <button
-                type="button"
-                className={styles.visibility}
-                aria-label={visible ? "Hide password" : "Show password"}
-                aria-pressed={visible}
-                aria-controls="login-password"
-                onClick={() => setVisible((current) => !current)}
-              >
-                <Icon name={visible ? "eye-off" : "eye"} />
-              </button>
-            }
-          />
-          <Button
-            type="submit"
-            fullWidth
-            icon={<Icon name="login" />}
-            loadingLabel="Signing in…"
-          >
-            Sign in
-          </Button>
-        </Form>
+      {error && (
+        <p role="alert" className={styles.problem}>
+          {error}
+        </p>
       )}
-      {step.kind === "otp" &&
-        (verificationState === "recovery-required" ? (
-          <div className={styles.followUp}>
-            <p>
-              Authenticator repair is not available in this frontend milestone.
-              Contact your approved platform recovery administrator. This
-              recovery session cannot open the platform workspace.
-            </p>
-            <LogoutButton label="End recovery session" />
-          </div>
-        ) : verificationState === "retry" ? (
-          <div className={styles.followUp}>
-            <p>
-              Check your session before submitting another verification code.
-            </p>
-            <Button
-              fullWidth
-              pending={busy}
-              onClick={retrySessionCheck}
-              icon={<Icon name="check" />}
-            >
-              Check session
-            </Button>
-            <LogoutButton
-              label="Cancel sign in"
-              disabled={busy}
-              fullWidth
-              icon={<Icon name="close" />}
+      {accepted ? (
+        <Button onClick={() => window.location.assign("/login")}>
+          Go to sign-in
+        </Button>
+      ) : (
+        <Form onSubmitAction={submit} className={styles.form}>
+          {needsPassword && !invitation && (
+            <Input
+              id="owner-email"
+              name="email"
+              label="Email"
+              type="email"
+              autoComplete="username"
+              maxLength={254}
+              required
             />
-          </div>
-        ) : canVerify ? (
-          <>
-            {challengeExpired && (
-              <p className={styles.problem} role="alert">
-                This sign-in request has expired. Start again to continue.
-              </p>
-            )}
-            <Form
-              className={styles.form}
-              noValidate
-              onSubmitAction={async (data) => {
-                clearErrorToast();
-                const raw = data.get("code");
-                const value = typeof raw === "string" ? raw.trim() : "";
-                const body =
-                  method === "totp"
-                    ? { method, totpCode: value }
-                    : { method, recoveryCode: value };
-                if (!validVerificationBody(body)) {
-                  setFields({
-                    code:
-                      method === "totp"
-                        ? "Enter a six-digit verification code."
-                        : "Enter a valid recovery code, including its hyphens.",
-                  });
-                  code.current?.focus();
-                  return;
-                }
-                if (challengeExpired) return;
-                setFields({});
-                setBusy(true);
-                if (code.current) code.current.value = "";
-                setOtp("");
-                setVerificationState("verifying");
-                try {
-                  const verified = await verifyMfa(method, value);
-                  if (verified.status === "mfa_recovery_required") {
-                    setVerificationState("recovery-required");
-                    return;
-                  }
-                  await confirmSession();
-                } catch (error: unknown) {
-                  if (
-                    error instanceof AuthRequestError &&
-                    (error.problem.status === 0 || error.problem.status >= 500)
-                  ) {
-                    if (code.current) code.current.value = "";
-                    setVerificationState("retry");
-                    showError(
-                      "We couldn't confirm verification. Check your session before submitting another code.",
-                    );
-                  } else {
-                    setVerificationState("input");
-                    showRequestError(error);
-                    if (method === "totp") {
-                      // Clear the rejected code and return focus so retyping is immediate.
-                      setOtp("");
-                      requestAnimationFrame(() => code.current?.focus());
-                    }
-                  }
-                } finally {
-                  setBusy(false);
-                }
+          )}
+          {needsPassword && registering && (
+            <Input
+              id="owner-name"
+              name="displayName"
+              label="Full name"
+              autoComplete="name"
+              maxLength={160}
+              required
+            />
+          )}
+          {needsPassword && (
+            <Input
+              id="owner-password"
+              name="password"
+              label="Password"
+              type="password"
+              autoComplete={registering ? "new-password" : "current-password"}
+              minLength={registering ? 8 : undefined}
+              maxLength={4096}
+              required
+            />
+          )}
+          {emailChallenge && (
+            <OtpInput
+              id="owner-code"
+              label="Email code"
+              name="code"
+              value={code}
+              onValueChange={setCode}
+              autoSubmit={false}
+              required
+            />
+          )}
+          <Button type="submit" disabled={codeRequested && code.length !== 6}>
+            {emailChallenge ? "Verify email code" : "Send email code"}
+          </Button>
+          {emailChallenge && (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setEmailChallenge(undefined);
+                setCode("");
+                setError(undefined);
               }}
             >
-              {method === "totp" ? (
-                <OtpInput
-                  key="totp"
-                  ref={code}
-                  id="login-code"
-                  name="code"
-                  label="Verification code"
-                  required
-                  disabled={challengeExpired}
-                  error={fields.code}
-                  value={otp}
-                  onValueChange={setOtp}
-                />
-              ) : (
-                <Input
-                  key="recovery_code"
-                  ref={code}
-                  id="login-code"
-                  name="code"
-                  label="Recovery code"
-                  autoComplete="one-time-code"
-                  inputMode="text"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  maxLength={64}
-                  required
-                  disabled={challengeExpired}
-                  icon={<Icon name="lock" />}
-                  error={fields.code}
-                  placeholder="XXXX-XXXX-…"
-                />
-              )}
-              <Button
-                type="submit"
-                disabled={challengeExpired}
-                fullWidth
-                icon={<Icon name="check" />}
-              >
-                Verify and continue
-              </Button>
-            </Form>
-            <div className={styles.secondaryActions}>
-              {methods.includes("totp") &&
-                methods.includes("recovery_code") && (
-                  <button
-                    type="button"
-                    className={styles.link}
-                    disabled={busy}
-                    onClick={() => {
-                      if (code.current) code.current.value = "";
-                      setOtp("");
-                      setMethod(method === "totp" ? "recovery_code" : "totp");
-                      setFields({});
-                      clearErrorToast();
-                    }}
-                  >
-                    {method === "totp"
-                      ? "Use a recovery code"
-                      : "Use my authenticator"}
-                  </button>
-                )}
-              <button
-                type="button"
-                className={styles.link}
-                disabled={busy}
-                onClick={restart}
-              >
-                Back to sign in
-              </button>
-            </div>
-          </>
-        ) : (
-          <div className={styles.followUp}>
-            <p>
-              This account needs an approved authenticator before it can access
-              platform administration. Contact your platform administrator to
-              complete enrollment.
-            </p>
-            <Button variant="secondary" disabled={busy} onClick={restart}>
-              Back to sign in
+              {invitation ? "Request a new code" : "Back to sign-in"}
             </Button>
-          </div>
-        ))}
-    </div>
+          )}
+        </Form>
+      )}
+    </section>
   );
 }
