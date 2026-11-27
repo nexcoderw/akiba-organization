@@ -1,4 +1,5 @@
 import {
+  isRecord,
   parseChallenge,
   parseVerification,
   safeProblem,
@@ -151,4 +152,67 @@ export async function endSession() {
       : null;
   channel?.postMessage("signed-out");
   channel?.close();
+}
+
+export async function requestOwnerFlow(
+  step:
+    | "login"
+    | "verify"
+    | "begin"
+    | "existing"
+    | "register"
+    | "send-code"
+    | "accept",
+  body: Record<string, string>,
+): Promise<unknown> {
+  const path =
+    step === "login" || step === "verify"
+      ? paths[step]
+      : `/api/auth/owner-enrollment/${step}`;
+  const headers = new Headers({ "Content-Type": "application/json" });
+  if (step === "send-code" || step === "accept") {
+    const csrf = csrfToken();
+    if (!csrf)
+      throw new Error(
+        "Your enrollment session expired. Reopen your invitation.",
+      );
+    headers.set("x-owner-csrf-token", csrf);
+  }
+  const response = await fetch(path, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+    cache: "no-store",
+    redirect: "error",
+    signal: AbortSignal.timeout(25000),
+  });
+  const data: unknown = await response.json().catch(() => null);
+  if (response.ok) return data;
+  if (response.status === 429)
+    throw new Error("Wait a minute before requesting another code.");
+  if (
+    step === "login" &&
+    isRecord(data) &&
+    data.code === "OWNER_ACCOUNT_NOT_FOUND"
+  )
+    throw new Error("No organization owner account exists for that email.");
+  if (response.status === 401 || response.status === 412) {
+    if (step === "accept" || step === "verify")
+      throw new Error(
+        "The email code is invalid or expired. Check the latest email or start again.",
+      );
+    if (step === "login" || step === "existing")
+      throw new Error("Check your email and password and try again.");
+    throw new Error(
+      "Your invitation is invalid or expired. Reopen the original link.",
+    );
+  }
+  if (
+    step === "register" &&
+    (response.status === 400 || response.status === 409)
+  )
+    throw new Error(
+      "Check your name and choose a stronger password of at least eight characters.",
+    );
+  throw new Error("We couldn't complete this step. Please try again.");
 }
