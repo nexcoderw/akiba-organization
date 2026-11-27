@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { AuthNotice } from "@/components/auth/auth-notice";
+import { LoginForm } from "@/components/auth/login-form";
 import { getSession } from "@/lib/auth/session.server";
 
 export const metadata = {
@@ -20,13 +21,7 @@ async function Login() {
       />
     );
   }
-  return (
-    <AuthNotice
-      title="Organization sign-in is unavailable"
-      message="Organization verification is still being set up. If you received an invitation, open the link in your email to review it."
-      retryable={false}
-    />
-  );
+  return <LoginForm />;
 }
 
 export default function LoginPage() {
