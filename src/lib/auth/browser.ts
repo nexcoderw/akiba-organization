@@ -207,12 +207,15 @@ export async function requestOwnerFlow(
       "Your invitation is invalid or expired. Reopen the original link.",
     );
   }
-  if (
-    step === "register" &&
-    (response.status === 400 || response.status === 409)
-  )
-    throw new Error(
-      "Check your name and choose a stronger password of at least eight characters.",
-    );
+  if (step === "register") {
+    if (isRecord(data) && data.code === "PASSWORD_POLICY_VIOLATION") {
+      throw new Error(
+        "Choose a password of at least eight characters and avoid common or compromised passwords.",
+      );
+    }
+    if (response.status === 409) {
+      throw new Error("Account setup has changed. Reopen your invitation.");
+    }
+  }
   throw new Error("We couldn't complete this step. Please try again.");
 }
