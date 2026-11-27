@@ -101,7 +101,8 @@ export function OrganizationInvitationPreview() {
         !isRecord(result) ||
         (result.nextStep !== "register" && result.nextStep !== "sign_in") ||
         !isInvitationToken(result.token) ||
-        typeof result.organizationName !== "string"
+        typeof result.organizationName !== "string" ||
+        typeof result.invitedDisplayName !== "string"
       ) {
         throw new Error(
           "We couldn't start enrollment. Reopen your invitation.",
@@ -112,6 +113,7 @@ export function OrganizationInvitationPreview() {
         nextStep: result.nextStep,
         token: result.token,
         organizationName: result.organizationName,
+        invitedDisplayName: result.invitedDisplayName,
       });
     } catch (value) {
       setError(
