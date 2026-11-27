@@ -2,11 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/shared/button";
+import { requestOwnerFlow } from "@/lib/auth/browser";
+import { isRecord } from "@/lib/auth/contracts";
 import {
   invitationPreviewPath,
   invitationTokenFromFragment,
+  isInvitationToken,
   parseInvitationPreview,
 } from "@/lib/auth/invitation-preview";
+import { LoginForm, type EnrollmentStart } from "./login-form";
 import styles from "./organization-invitation-preview.module.css";
 
 type PreviewState =
@@ -16,6 +20,7 @@ type PreviewState =
 
 export function OrganizationInvitationPreview() {
   const [state, setState] = useState<PreviewState>({ kind: "ready" });
+  const [enrollment, setEnrollment] = useState<EnrollmentStart>();
   const [error, setError] = useState<string>();
   const token = useRef<string | null>(null);
   const pending = useRef<AbortController | null>(null);
@@ -74,7 +79,6 @@ export function OrganizationInvitationPreview() {
       if (controller.signal.aborted) return;
       if (!preview) throw new Error("Invalid invitation preview response.");
 
-      token.current = null;
       setState({ kind: "valid", organizationName: preview.organizationName });
     } catch {
       if (!controller.signal.aborted) {
@@ -84,6 +88,41 @@ export function OrganizationInvitationPreview() {
       pending.current = null;
     }
   }
+
+  async function begin() {
+    const proof = token.current;
+    if (!proof) return;
+    setError(undefined);
+    try {
+      const result = await requestOwnerFlow("begin", {
+        invitationToken: proof,
+      });
+      if (
+        !isRecord(result) ||
+        (result.nextStep !== "register" && result.nextStep !== "sign_in") ||
+        !isInvitationToken(result.token) ||
+        typeof result.organizationName !== "string"
+      ) {
+        throw new Error(
+          "We couldn't start enrollment. Reopen your invitation.",
+        );
+      }
+      token.current = null;
+      setEnrollment({
+        nextStep: result.nextStep,
+        token: result.token,
+        organizationName: result.organizationName,
+      });
+    } catch (value) {
+      setError(
+        value instanceof Error
+          ? value.message
+          : "We couldn't start enrollment.",
+      );
+    }
+  }
+
+  if (enrollment) return <LoginForm invitation={enrollment} />;
 
   return (
     <div className={styles.panel}>
@@ -97,10 +136,14 @@ export function OrganizationInvitationPreview() {
       {state.kind === "valid" && (
         <>
           <p>You’ve been invited to manage {state.organizationName}.</p>
-          <p>
-            Account setup is unavailable here. Contact the person who invited
-            you for help.
-          </p>
+          {error && (
+            <p role="alert" className={styles.error}>
+              {error}
+            </p>
+          )}
+          <Button onClick={begin} loadingLabel="Starting setup…">
+            Continue to setup
+          </Button>
         </>
       )}
       {state.kind === "invalid" && (
