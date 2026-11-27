@@ -49,12 +49,7 @@ function validInput(step: keyof typeof paths, input: unknown): boolean {
     typeof input.password === "string" &&
     input.password.length > 0 &&
     input.password.length <= 4096 &&
-    (step === "existing"
-      ? size === 2
-      : size === 3 &&
-        typeof input.displayName === "string" &&
-        input.displayName.length > 0 &&
-        input.displayName.length <= 160)
+    size === 2
   );
 }
 
@@ -112,9 +107,9 @@ export async function ownerFlow(operation: string, request: Request) {
     if (!upstream.ok)
       return failed(
         upstream.status,
-        step === "login" &&
-          isRecord(body) &&
-          body.code === "OWNER_ACCOUNT_NOT_FOUND"
+        isRecord(body) &&
+          ((step === "login" && body.code === "OWNER_ACCOUNT_NOT_FOUND") ||
+            (step === "register" && body.code === "PASSWORD_POLICY_VIOLATION"))
           ? body.code
           : undefined,
       );
@@ -125,7 +120,10 @@ export async function ownerFlow(operation: string, request: Request) {
         (body.nextStep !== "register" && body.nextStep !== "sign_in") ||
         !isInvitationToken(body.challengeToken) ||
         typeof body.organizationName !== "string" ||
-        body.organizationName.length > 320
+        body.organizationName.length > 320 ||
+        typeof body.invitedDisplayName !== "string" ||
+        !body.invitedDisplayName.trim() ||
+        Array.from(body.invitedDisplayName).length > 160
       )
         return failed(502);
       return Response.json(
@@ -133,6 +131,7 @@ export async function ownerFlow(operation: string, request: Request) {
           nextStep: body.nextStep,
           token: body.challengeToken,
           organizationName: body.organizationName,
+          invitedDisplayName: body.invitedDisplayName,
         },
         { headers },
       );

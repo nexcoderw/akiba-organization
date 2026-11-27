@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/shared/button";
 import { Form } from "@/components/shared/form";
-import { Input } from "@/components/shared/input";
+import { Icon } from "@/components/shared/icon";
+import { Input, type InputProps } from "@/components/shared/input";
 import { OtpInput } from "@/components/shared/otp-input";
 import { readSession, requestOwnerFlow } from "@/lib/auth/browser";
-import { isRecord } from "@/lib/auth/contracts";
+import { isRecord, validEnrollmentBody } from "@/lib/auth/contracts";
 import { isInvitationToken } from "@/lib/auth/invitation-preview";
 import styles from "./login-form.module.css";
 
@@ -14,6 +15,38 @@ export interface EnrollmentStart {
   nextStep: "register" | "sign_in";
   token: string;
   organizationName: string;
+  invitedDisplayName: string;
+}
+
+function PasswordInput({
+  id,
+  name,
+  ...props
+}: Omit<InputProps, "type" | "icon" | "trailingAction">) {
+  const [visible, setVisible] = useState(false);
+  const field =
+    name === "confirmPassword" ? "password confirmation" : "password";
+  return (
+    <Input
+      {...props}
+      id={id}
+      name={name}
+      type={visible ? "text" : "password"}
+      icon={<Icon name="lock" />}
+      trailingAction={
+        <button
+          type="button"
+          className={styles.visibility}
+          aria-label={`${visible ? "Hide" : "Show"} ${field}`}
+          aria-pressed={visible}
+          aria-controls={id}
+          onClick={() => setVisible((current) => !current)}
+        >
+          <Icon name={visible ? "eye-off" : "eye"} />
+        </button>
+      }
+    />
+  );
 }
 
 export function LoginForm({ invitation }: { invitation?: EnrollmentStart }) {
@@ -22,6 +55,10 @@ export function LoginForm({ invitation }: { invitation?: EnrollmentStart }) {
   const [accepted, setAccepted] = useState(false);
   const [code, setCode] = useState("");
   const [error, setError] = useState<string>();
+  const [passwordProblem, setPasswordProblem] = useState<{
+    field: "owner-password" | "owner-confirm-password";
+    message: string;
+  }>();
   const heading = useRef<HTMLHeadingElement>(null);
   const codeRequested = emailChallenge !== undefined;
 
@@ -39,6 +76,7 @@ export function LoginForm({ invitation }: { invitation?: EnrollmentStart }) {
 
   async function submit(data: FormData) {
     setError(undefined);
+    setPasswordProblem(undefined);
     try {
       if (emailChallenge) {
         if (invitation) {
@@ -63,14 +101,27 @@ export function LoginForm({ invitation }: { invitation?: EnrollmentStart }) {
 
       const password = String(data.get("password") ?? "");
       if (invitation && !enrollmentAuthenticated) {
+        if (invitation.nextStep === "register") {
+          if (!validEnrollmentBody("enrollmentPassword", { password })) {
+            passwordIssue(
+              "owner-password",
+              "Use at least eight characters and avoid unsupported characters.",
+            );
+            return;
+          }
+          if (data.get("confirmPassword") !== password) {
+            passwordIssue(
+              "owner-confirm-password",
+              "The passwords don’t match.",
+            );
+            return;
+          }
+        }
         await requestOwnerFlow(
           invitation.nextStep === "register" ? "register" : "existing",
           {
             challengeToken: invitation.token,
             password,
-            ...(invitation.nextStep === "register"
-              ? { displayName: String(data.get("displayName") ?? "") }
-              : {}),
           },
         );
         setEnrollmentAuthenticated(true);
@@ -90,6 +141,14 @@ export function LoginForm({ invitation }: { invitation?: EnrollmentStart }) {
       setCode("");
       showError(value);
     }
+  }
+
+  function passwordIssue(
+    field: "owner-password" | "owner-confirm-password",
+    message: string,
+  ) {
+    setPasswordProblem({ field, message });
+    requestAnimationFrame(() => document.getElementById(field)?.focus());
   }
 
   const registering = invitation?.nextStep === "register";
@@ -143,25 +202,46 @@ export function LoginForm({ invitation }: { invitation?: EnrollmentStart }) {
               required
             />
           )}
-          {needsPassword && registering && (
+          {needsPassword && invitation && (
             <Input
               id="owner-name"
-              name="displayName"
-              label="Full name"
-              autoComplete="name"
-              maxLength={160}
-              required
+              label="Invited name"
+              hint="This name comes from your invitation."
+              value={invitation.invitedDisplayName}
+              readOnly
             />
           )}
           {needsPassword && (
-            <Input
+            <PasswordInput
               id="owner-password"
               name="password"
               label="Password"
-              type="password"
               autoComplete={registering ? "new-password" : "current-password"}
               minLength={registering ? 8 : undefined}
               maxLength={4096}
+              hint={registering ? "Use at least eight characters." : undefined}
+              error={
+                passwordProblem?.field === "owner-password"
+                  ? passwordProblem.message
+                  : undefined
+              }
+              onChange={() => setPasswordProblem(undefined)}
+              required
+            />
+          )}
+          {needsPassword && registering && (
+            <PasswordInput
+              id="owner-confirm-password"
+              name="confirmPassword"
+              label="Confirm password"
+              autoComplete="new-password"
+              maxLength={4096}
+              error={
+                passwordProblem?.field === "owner-confirm-password"
+                  ? passwordProblem.message
+                  : undefined
+              }
+              onChange={() => setPasswordProblem(undefined)}
               required
             />
           )}
